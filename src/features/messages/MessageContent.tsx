@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
-import { MessageInput } from './MessageInput';
+import { ThreadList } from './ThreadList';
+import { MessageThread } from './MessageThread'
+import { PinMessage } from './PinMessage';
 
 interface Message {
   id: number;
@@ -15,91 +17,167 @@ interface Thread {
   messages: Message[];
 }
 
-interface MessageContentProps {
-  threads: Thread[];
-  selectedThreadId: number | null;
-  setThreads: React.Dispatch<React.SetStateAction<Thread[]>>;
-  setSelectedThreadId: (id: number | null) => void;
-  setPinnedMessageId: (id: number | null) => void;
-  pinnedMessageId: number | null;
-}
+export function MessageContent() {
+  const [activeTab, setActiveTab] = useState<'messages' | 'profile' | 'settings'>('messages');
+  const [threads, setThreads] = useState<Thread[]>([
+    {
+      id: 1,
+      name: 'Alice',
+      messages: [
+        { id: 1, sender: 'Alice', text: 'Hey there!' },
+        { id: 2, sender: 'Me', text: 'Hello Alice!' },
+      ],
+    },
+    {
+      id: 2,
+      name: 'Bob',
+      messages: [{ id: 1, sender: 'Bob', text: 'Hi, how are you?' }],
+    },
+  ]);
+  const [selectedThreadId, setSelectedThreadId] = useState<number | null>(1);
+  const [pinnedMessageId, setPinnedMessageId] = useState<number | null>(null);
 
-export const MessageContent: React.FC<MessageContentProps> = ({
-  threads,
-  selectedThreadId,
-  setThreads,
-  setPinnedMessageId,
-}) => {
+  useEffect(() => {
+    if (selectedThreadId !== null) {
+      const selectedThread = threads.find(t => t.id === selectedThreadId);
+      const pinned = selectedThread?.messages.find(m => m.pinned);
+      setPinnedMessageId(pinned?.id ?? null);
+    }
+  }, [selectedThreadId, threads]);
+
   const selectedThread = threads.find(t => t.id === selectedThreadId);
 
-  const handleSendMessage = (text: string) => {
-    if (!text.trim() || selectedThreadId === null) return;
-
-    const newMessage: Message = {
-      id: Date.now(),
-      sender: 'Me',
-      text: text.trim(),
-    };
-
-    setThreads(prev =>
-      prev.map(thread =>
-        thread.id === selectedThreadId
-          ? { ...thread, messages: [...thread.messages, newMessage] }
-          : thread
-      )
-    );
-  };
-
   return (
-  <Container>
-    {selectedThread ? (
-      <>
-        <ScrollableMessageList>
-          {selectedThread.messages.map(message => (
-            <div
-              key={message.id}
-              className={`p-2 mb-2 rounded d-flex justify-content-between ${
-                message.sender === 'Me' ? 'bg-white' : 'bg-light'
-              }`}
-            >
-              <div>
-                <strong>{message.sender}:</strong> {message.text}
-              </div>
-              <button
-                className="btn btn-sm btn-outline-secondary ms-2"
-                onClick={() => setPinnedMessageId(message.id)}
-              >
-                📌
-              </button>
-            </div>
-          ))}
-        </ScrollableMessageList>
+      <AppContainer>
+        <MainContent>
+          <ThreadList
+              threads={threads}
+              selectedThreadId={selectedThreadId}
+              onSelectThread={setSelectedThreadId}
+          />
 
-        <FixedInput>
-          <MessageInput key={selectedThreadId} onSend={handleSendMessage} />
-        </FixedInput>
-      </>
-    ) : (
-      <div className="text-muted p-3">Select a thread to view messages.</div>
-    )}
-  </Container>
-);
+          <RightPanel>
+            <TabBar>
+              {['messages', 'profile', 'settings'].map(tab => (
+                  <TabButton
+                      key={tab}
+                      className={activeTab === tab ? 'active' : ''}
+                      onClick={() => setActiveTab(tab as any)}
+                  >
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </TabButton>
+              ))}
+            </TabBar>
 
-};
+            {pinnedMessageId !== null && selectedThread && (() => {
+              const pinnedMsg = selectedThread.messages.find(m => m.id === pinnedMessageId);
+              if (!pinnedMsg) return null;
 
+              return (
+                  <PinMessage
+                      message={pinnedMsg}
+                      onUnpin={() => {
+                        setThreads(prev =>
+                            prev.map(thread =>
+                                thread.id === selectedThreadId
+                                    ? {
+                                      ...thread,
+                                      messages: thread.messages.map(m =>
+                                          m.id === pinnedMessageId ? { ...m, pinned: false } : m
+                                      ),
+                                    }
+                                    : thread
+                            )
+                        );
+                        setPinnedMessageId(null);
+                      }}
+                  />
+              );
+            })()}
 
-const Container = styled.div`
+            <ContentCard>
+              <CardBody>
+                {activeTab === 'messages' && selectedThreadId !== null && (
+                    <MessageThread
+                        threads={threads}
+                        selectedThreadId={selectedThreadId}
+                        setThreads={setThreads}
+                        setSelectedThreadId={setSelectedThreadId}
+                        setPinnedMessageId={setPinnedMessageId}
+                        pinnedMessageId={pinnedMessageId}
+                    />
+                )}
+                {activeTab === 'profile' && <div>Profile tab content goes here.</div>}
+                {activeTab === 'settings' && <div>Settings tab content goes here.</div>}
+              </CardBody>
+            </ContentCard>
+          </RightPanel>
+        </MainContent>
+      </AppContainer>
+  );
+}
+
+// Styled Components
+const AppContainer = styled.div`
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 100vh;
 `;
 
-const ScrollableMessageList = styled.div`
-  flex: 1 1 auto;
-  overflow-y: auto;
-  padding: 1rem;
+const MainContent = styled.div`
+  display: flex;
+  flex-grow: 1;
+  overflow: hidden;
 `;
 
-const FixedInput = styled.div`
-  padding: 0.75rem;
+const RightPanel = styled.div`
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+`;
+
+
+
+
+
+
+
+const TabBar = styled.ul`
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-bottom: 1px solid #dee2e6;
+  background-color: #f8f9fa;
+`;
+
+const TabButton = styled.button`
+  padding: 0.5rem 1rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  &.active {
+    font-weight: bold;
+    border-bottom: 2px solid #007bff;
+  }
+`;
+
+const ContentCard = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin: 1rem;
+  border: 1px solid red;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.08);
+  min-height: 0; /* ✅ allow child flex items to calculate height correctly */
+`;
+
+const CardBody = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0; /* ✅ critical for scrollable children */
 `;
